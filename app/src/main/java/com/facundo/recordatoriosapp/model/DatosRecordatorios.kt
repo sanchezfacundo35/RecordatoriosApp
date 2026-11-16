@@ -1,4 +1,3 @@
-
 package com.facundo.recordatoriosapp.model
 
 object DatosRecordatorios {
@@ -39,7 +38,6 @@ object DatosRecordatorios {
     val categorias: Set<Categoria> =
         recordatorios.map { it.categoria }.toSet()
 
-
     val etiquetasCategorias: Map<Categoria, String> = mapOf(
         Categoria.PERSONAL to "Personal",
         Categoria.TRABAJO to "Trabajo",
@@ -47,7 +45,6 @@ object DatosRecordatorios {
         Categoria.SALUD to "Salud",
         Categoria.HOGAR to "Hogar"
     )
-
 
     fun filtrarPorEstado(
         estado: EstadoRecordatorio
