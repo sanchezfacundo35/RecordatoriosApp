@@ -1,5 +1,5 @@
-package com.facundo.recordatoriosapp.ui.screens
 
+package com.facundo.recordatoriosapp.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,13 +8,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.facundo.recordatoriosapp.model.Recordatorio
@@ -23,8 +26,14 @@ import com.facundo.recordatoriosapp.model.Recordatorio
 @Composable
 fun PantallaDetalleRecordatorio(
     recordatorio: Recordatorio?,
+    onEditar: (Recordatorio) -> Unit,
+    onEliminar: (Recordatorio) -> Unit,
     onVolver: () -> Unit
 ) {
+    var mostrarConfirmacion by remember {
+        mutableStateOf(false)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -32,7 +41,6 @@ fun PantallaDetalleRecordatorio(
             )
         }
     ) { innerPadding ->
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -59,11 +67,9 @@ fun PantallaDetalleRecordatorio(
                         )
 
                         Text("ID: ${recordatorio.id}")
-
+                        Text("Fecha: ${recordatorio.fecha}")
                         Text("Categoría: ${recordatorio.categoria}")
-
                         Text("Prioridad: ${recordatorio.prioridad}")
-
                         Text("Estado: ${recordatorio.estado}")
 
                         Text(
@@ -81,16 +87,63 @@ fun PantallaDetalleRecordatorio(
                         }
                     }
                 }
+
+                Button(
+                    onClick = { onEditar(recordatorio) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Editar")
+                }
+
+                OutlinedButton(
+                    onClick = { mostrarConfirmacion = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Eliminar")
+                }
+
+                Button(
+                    onClick = onVolver,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Volver")
+                }
+
+                if (mostrarConfirmacion) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            mostrarConfirmacion = false
+                        },
+                        title = {
+                            Text("Eliminar recordatorio")
+                        },
+                        text = {
+                            Text("¿Estás seguro de que querés eliminar este recordatorio?")
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    onEliminar(recordatorio)
+                                    mostrarConfirmacion = false
+                                }
+                            ) {
+                                Text("Eliminar")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    mostrarConfirmacion = false
+                                }
+                            ) {
+                                Text("Cancelar")
+                            }
+                        }
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = onVolver,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Volver")
-            }
         }
     }
 }

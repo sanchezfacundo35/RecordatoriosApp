@@ -1,6 +1,11 @@
+
 package com.facundo.recordatoriosapp.viewmodel
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.facundo.recordatoriosapp.data.ConnectivityObserver
+import com.facundo.recordatoriosapp.data.PreferenciasApp
+import com.facundo.recordatoriosapp.data.PreferenciasRepository
 import com.facundo.recordatoriosapp.data.RecordatorioRepository
 import com.facundo.recordatoriosapp.model.Categoria
 import com.facundo.recordatoriosapp.model.EstadoRecordatorio
@@ -10,6 +15,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.Job
 
 sealed interface EstadoListaRecordatorios {
     data object Cargando : EstadoListaRecordatorios
@@ -28,24 +37,83 @@ data class RecordatorioUiState(
     val errorDescripcion: String? = null,
     val errorGeneral: String? = null,
     val guardando: Boolean = false,
-    val guardado: Boolean = false
+    val guardado: Boolean = false,
+    val preferencias: PreferenciasApp = PreferenciasApp(),
+    val recordatorioEditando: Recordatorio? = null,
+    val hayConexion: Boolean = false,
+    val filtroEstado: String? = null,
+    val filtroCategoria: Categoria? = null,
+    val filtroPrioridad: Prioridad? = null
 )
 
 class RecordatorioViewModel(
-    private val repository: RecordatorioRepository
+    private val repository: RecordatorioRepository,
+    private val preferenciasRepository: PreferenciasRepository,
+    private val connectivityObserver: ConnectivityObserver
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RecordatorioUiState())
     val uiState: StateFlow<RecordatorioUiState> = _uiState.asStateFlow()
+    private var cargaJob: Job? = null
 
     init {
         cargarRecordatorios()
+        observarPreferencias()
+        observarConexion()
+    }
+
+    private fun observarPreferencias() {
+        viewModelScope.launch {
+            preferenciasRepository.preferencias.collect { preferencias ->
+                _uiState.value = _uiState.value.copy(
+                    preferencias = preferencias
+                )
+            }
+        }
+    }
+
+    private fun observarConexion() {
+        viewModelScope.launch {
+            connectivityObserver.observarConexion().collect { conectado ->
+
+                _uiState.value = _uiState.value.copy(
+                    hayConexion = conectado
+                )
+
+                // Si vuelve Internet, sincroniza los cambios pendientes de Room.
+                if (conectado) {
+                    try {
+                        repository.sincronizarPendientes()
+                    } catch (e: Exception) {
+                        // Los datos locales se conservan para volver a intentar.
+                    }
+                }
+            }
+        }
     }
 
     private fun cargarRecordatorios() {
-        viewModelScope.launch {
+        cargaJob?.cancel()
+
+        cargaJob = viewModelScope.launch {
             try {
-                repository.observarRecordatorios().collect { lista ->
+                val actual = _uiState.value
+
+                val flujo = when {
+                    actual.filtroEstado != null ->
+                        repository.observarPorEstado(actual.filtroEstado)
+
+                    actual.filtroCategoria != null ->
+                        repository.observarPorCategoria(actual.filtroCategoria.name)
+
+                    actual.filtroPrioridad != null ->
+                        repository.observarPorPrioridad(actual.filtroPrioridad.name)
+
+                    else ->
+                        repository.observarRecordatorios()
+                }
+
+                flujo.collect { lista ->
                     _uiState.value = _uiState.value.copy(
                         lista = if (lista.isEmpty()) {
                             EstadoListaRecordatorios.Vacio
@@ -54,15 +122,55 @@ class RecordatorioViewModel(
                         }
                     )
                 }
+
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    lista = EstadoListaRecordatorios.Error(
-                        e.message ?: "No se pudieron cargar los recordatorios"
+                if (e !is kotlinx.coroutines.CancellationException) {
+                    _uiState.value = _uiState.value.copy(
+                        lista = EstadoListaRecordatorios.Error(
+                            e.message ?: "No se pudieron cargar los recordatorios"
+                        )
                     )
-                )
+                }
             }
         }
     }
+
+    fun filtrarPorEstado(estado: String?) {
+        _uiState.value = _uiState.value.copy(
+            filtroEstado = estado,
+            filtroCategoria = null,
+            filtroPrioridad = null
+        )
+        cargarRecordatorios()
+    }
+
+    fun filtrarPorCategoria(categoria: Categoria?) {
+        _uiState.value = _uiState.value.copy(
+            filtroEstado = null,
+            filtroCategoria = categoria,
+            filtroPrioridad = null
+        )
+        cargarRecordatorios()
+    }
+
+    fun filtrarPorPrioridad(prioridad: Prioridad?) {
+        _uiState.value = _uiState.value.copy(
+            filtroEstado = null,
+            filtroCategoria = null,
+            filtroPrioridad = prioridad
+        )
+        cargarRecordatorios()
+    }
+
+    fun limpiarFiltros() {
+        _uiState.value = _uiState.value.copy(
+            filtroEstado = null,
+            filtroCategoria = null,
+            filtroPrioridad = null
+        )
+        cargarRecordatorios()
+    }
+
 
     fun reintentarCarga() {
         _uiState.value = _uiState.value.copy(
@@ -93,6 +201,20 @@ class RecordatorioViewModel(
         _uiState.value = _uiState.value.copy(prioridad = valor)
     }
 
+    fun iniciarEdicion(recordatorio: Recordatorio) {
+        _uiState.value = _uiState.value.copy(
+            recordatorioEditando = recordatorio,
+            titulo = recordatorio.titulo,
+            descripcion = recordatorio.descripcion ?: "",
+            categoria = recordatorio.categoria,
+            prioridad = recordatorio.prioridad,
+            errorTitulo = null,
+            errorDescripcion = null,
+            errorGeneral = null,
+            guardado = false
+        )
+    }
+
     fun guardarRecordatorio() {
         val actual = _uiState.value
         val titulo = actual.titulo.trim()
@@ -105,13 +227,18 @@ class RecordatorioViewModel(
             "La descripción no puede superar los 200 caracteres"
         } else null
 
-        if (errorTitulo != null || errorDescripcion != null ||
-            actual.categoria == null || actual.prioridad == null
+        if (
+            errorTitulo != null ||
+            errorDescripcion != null ||
+            actual.categoria == null ||
+            actual.prioridad == null
         ) {
             _uiState.value = actual.copy(
                 errorTitulo = errorTitulo,
                 errorDescripcion = errorDescripcion,
-                errorGeneral = if (actual.categoria == null || actual.prioridad == null) {
+                errorGeneral = if (
+                    actual.categoria == null || actual.prioridad == null
+                ) {
                     "Seleccioná una categoría y una prioridad"
                 } else null
             )
@@ -125,25 +252,42 @@ class RecordatorioViewModel(
             )
 
             try {
-                val listaActual = repository.observarRecordatorios().value
-                val nuevoId = (listaActual.maxOfOrNull { it.id } ?: 0) + 1
+                val original = actual.recordatorioEditando
 
-                val nuevoRecordatorio = Recordatorio(
-                    id = nuevoId,
-                    titulo = titulo,
-                    descripcion = actual.descripcion.trim().ifBlank { null },
-                    categoria = actual.categoria,
-                    prioridad = actual.prioridad,
-                    estado = EstadoRecordatorio.Pendiente
-                )
+                val recordatorio = if (original == null) {
+                    Recordatorio(
+                        id = 0,
+                        titulo = titulo,
+                        fecha = SimpleDateFormat(
+                            "yyyy-MM-dd",
+                            Locale.getDefault()
+                        ).format(Date()),
+                        descripcion = actual.descripcion.trim().ifBlank { null },
+                        categoria = actual.categoria,
+                        prioridad = actual.prioridad,
+                        estado = EstadoRecordatorio.Pendiente
+                    )
+                } else {
+                    original.copy(
+                        titulo = titulo,
+                        descripcion = actual.descripcion.trim().ifBlank { null },
+                        categoria = actual.categoria,
+                        prioridad = actual.prioridad
+                    )
+                }
 
-                repository.agregar(nuevoRecordatorio)
+                if (original == null) {
+                    repository.agregar(recordatorio)
+                } else {
+                    repository.actualizar(recordatorio)
+                }
 
                 _uiState.value = _uiState.value.copy(
                     titulo = "",
                     descripcion = "",
                     categoria = null,
                     prioridad = null,
+                    recordatorioEditando = null,
                     guardando = false,
                     guardado = true
                 )
@@ -158,5 +302,66 @@ class RecordatorioViewModel(
 
     fun limpiarConfirmacion() {
         _uiState.value = _uiState.value.copy(guardado = false)
+    }
+
+    fun cancelarEdicion() {
+        _uiState.value = _uiState.value.copy(
+            titulo = "",
+            descripcion = "",
+            categoria = null,
+            prioridad = null,
+            recordatorioEditando = null,
+            errorTitulo = null,
+            errorDescripcion = null,
+            errorGeneral = null,
+            guardando = false,
+            guardado = false
+        )
+    }
+
+    fun guardarTema(tema: String) {
+        viewModelScope.launch {
+            preferenciasRepository.guardarTema(tema)
+        }
+    }
+
+    fun guardarMostrarCompletados(mostrar: Boolean) {
+        viewModelScope.launch {
+            preferenciasRepository.guardarMostrarCompletados(mostrar)
+        }
+    }
+
+    fun guardarOrden(orden: String) {
+        viewModelScope.launch {
+            preferenciasRepository.guardarOrden(orden)
+        }
+    }
+
+    fun actualizarRecordatorio(
+        recordatorio: Recordatorio,
+        onResultado: (String?) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                repository.actualizar(recordatorio)
+                onResultado(null)
+            } catch (e: Exception) {
+                onResultado(e.message ?: "No se pudo actualizar")
+            }
+        }
+    }
+
+    fun eliminarRecordatorio(
+        recordatorio: Recordatorio,
+        onResultado: (String?) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                repository.eliminar(recordatorio)
+                onResultado(null)
+            } catch (e: Exception) {
+                onResultado(e.message ?: "No se pudo eliminar")
+            }
+        }
     }
 }

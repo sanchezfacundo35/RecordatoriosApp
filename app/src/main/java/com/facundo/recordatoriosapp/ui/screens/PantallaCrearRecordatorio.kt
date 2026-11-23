@@ -26,6 +26,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.facundo.recordatoriosapp.model.Categoria
 import com.facundo.recordatoriosapp.model.Prioridad
 import com.facundo.recordatoriosapp.viewmodel.RecordatorioViewModel
+import androidx.compose.foundation.background
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+
 
 @Composable
 fun PantallaCrearRecordatorio(
@@ -43,13 +47,22 @@ fun PantallaCrearRecordatorio(
                 uiState.categoria != null &&
                 uiState.prioridad != null
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("Crear recordatorio")
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+
+            Text(
+                text = if (uiState.recordatorioEditando != null) {
+                    "Editar recordatorio"
+                } else {
+                    "Crear recordatorio"
+                },
+                color = MaterialTheme.colorScheme.onBackground
+            )
 
         OutlinedTextField(
             value = uiState.titulo,
@@ -80,7 +93,10 @@ fun PantallaCrearRecordatorio(
             }
         )
 
-        Text("Categoría")
+            Text(
+                "Categoría",
+                color = MaterialTheme.colorScheme.onBackground
+            )
 
         Column {
             TextButton(
@@ -108,7 +124,10 @@ fun PantallaCrearRecordatorio(
             }
         }
 
-        Text("Prioridad")
+            Text(
+                "Prioridad",
+                color = MaterialTheme.colorScheme.onBackground
+            )
 
         Column {
             TextButton(
@@ -163,8 +182,11 @@ fun PantallaCrearRecordatorio(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    if (uiState.guardando) "Guardando..."
-                    else "Guardar"
+                    when {
+                        uiState.guardando -> "Guardando..."
+                        uiState.recordatorioEditando != null -> "Actualizar"
+                        else -> "Guardar"
+                    }
                 )
             }
         }
