@@ -1,3 +1,4 @@
+
 package com.facundo.recordatoriosapp.data
 
 import com.facundo.recordatoriosapp.model.Categoria
@@ -18,7 +19,9 @@ fun Recordatorio.toDto(): RecordatorioDto {
             EstadoRecordatorio.EnProgreso -> "EnProgreso"
             EstadoRecordatorio.Completado -> "Completado"
         },
-        ubicacion = ubicacion
+        ubicacion = ubicacion,
+        ownerUid = ownerUid,
+        firestoreId = firestoreId
     )
 }
 
@@ -36,6 +39,8 @@ fun RecordatorioDto.toRecordatorio(): Recordatorio {
             "Completado" -> EstadoRecordatorio.Completado
             else -> EstadoRecordatorio.Pendiente
         },
-        ubicacion = ubicacion
+        ubicacion = ubicacion,
+        ownerUid = ownerUid,
+        firestoreId = firestoreId
     )
 }

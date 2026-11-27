@@ -32,5 +32,9 @@ data class RecordatorioEntity(
     val remoteId: Int? = null,
 
     @ColumnInfo(defaultValue = "0")
-    val pendienteEliminar: Boolean = false
+    val pendienteEliminar: Boolean = false,
+
+    val firestoreId: String? = null,
+
+    val ownerUid: String? = null
 )

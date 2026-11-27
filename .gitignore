@@ -14,3 +14,12 @@
 .cxx
 local.properties
 .idea/
+
+# Certificados de firma
+*.jks
+*.keystore
+
+# Artefactos de distribución
+/app/release/
+
+/app/google-services.json

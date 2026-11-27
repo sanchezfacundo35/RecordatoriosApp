@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [RecordatorioEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class RecordatorioDatabase : RoomDatabase() {
@@ -49,6 +49,17 @@ abstract class RecordatorioDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE recordatorios ADD COLUMN firestoreId TEXT"
+                )
+                db.execSQL(
+                    "ALTER TABLE recordatorios ADD COLUMN ownerUid TEXT"
+                )
+            }
+        }
+
         fun obtenerInstancia(context: Context): RecordatorioDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instancia = Room.databaseBuilder(
@@ -59,7 +70,8 @@ abstract class RecordatorioDatabase : RoomDatabase() {
                     .addMigrations(
                         MIGRATION_1_2,
                         MIGRATION_2_3,
-                        MIGRATION_3_4
+                        MIGRATION_3_4,
+                        MIGRATION_4_5
                     )
                     .build()
 

@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.facundo.recordatoriosapp.data.AuthRepository
 import com.facundo.recordatoriosapp.data.ConnectivityObserver
 import com.facundo.recordatoriosapp.data.PreferenciasApp
 import com.facundo.recordatoriosapp.data.PreferenciasRepository
@@ -21,10 +22,12 @@ import com.facundo.recordatoriosapp.data.RetrofitClient
 import com.facundo.recordatoriosapp.data.ServidorSimulado
 import com.facundo.recordatoriosapp.ui.NavegacionRecordatorios
 import com.facundo.recordatoriosapp.ui.theme.RecordatoriosAppTheme
+import com.facundo.recordatoriosapp.viewmodel.AuthViewModel
 import com.facundo.recordatoriosapp.viewmodel.RecordatorioViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.facundo.recordatoriosapp.data.FirestoreRepository
 
 class MainActivity : ComponentActivity() {
 
@@ -36,14 +39,14 @@ class MainActivity : ComponentActivity() {
 
         servidorSimulado = ServidorSimulado()
 
-        // Iniciamos el servidor fuera del hilo principal.
         lifecycleScope.launch {
+
             withContext(Dispatchers.IO) {
                 servidorSimulado.iniciar()
             }
 
-            // Cuando el servidor está listo, abrimos la interfaz.
             setContent {
+
                 val preferenciasRepository = remember {
                     PreferenciasRepository(applicationContext)
                 }
@@ -54,18 +57,44 @@ class MainActivity : ComponentActivity() {
                 RecordatoriosAppTheme(
                     darkTheme = preferencias.tema == "Oscuro"
                 ) {
+
                     val database = remember {
-                        RecordatorioDatabase.obtenerInstancia(applicationContext)
+                        RecordatorioDatabase.obtenerInstancia(
+                            applicationContext
+                        )
                     }
 
                     val api = remember {
-                        RetrofitClient.crearApi(servidorSimulado.obtenerUrl())
+                        RetrofitClient.crearApi(
+                            servidorSimulado.obtenerUrl()
+                        )
                     }
 
-                    val repository = remember(database, api) {
+                    val authRepository = remember {
+                        AuthRepository()
+                    }
+
+                    val firestoreRepository = remember {
+                        FirestoreRepository()
+                    }
+
+                    val authViewModel: AuthViewModel = viewModel(
+                        factory = remember(authRepository) {
+                            AuthViewModelFactory(authRepository)
+                        }
+                    )
+
+                    val repository = remember(
+                        database,
+                        api,
+                        authRepository,
+                        firestoreRepository
+                    ) {
                         RecordatorioRepositoryImpl(
-                            database.recordatorioDao(),
-                            api
+                            dao = database.recordatorioDao(),
+                            api = api,
+                            authRepository = authRepository,
+                            firestoreRepository = firestoreRepository
                         )
                     }
 
@@ -85,13 +114,13 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    val viewModel: RecordatorioViewModel = viewModel(
-                        factory = factory
-                    )
+                    val recordatorioViewModel: RecordatorioViewModel =
+                        viewModel(factory = factory)
 
                     NavegacionRecordatorios(
-                        viewModel = viewModel,
-                        repository = repository
+                        viewModel = recordatorioViewModel,
+                        repository = repository,
+                        authViewModel = authViewModel
                     )
                 }
             }
@@ -102,7 +131,26 @@ class MainActivity : ComponentActivity() {
         if (::servidorSimulado.isInitialized) {
             servidorSimulado.detener()
         }
+
         super.onDestroy()
+    }
+}
+
+class AuthViewModelFactory(
+    private val authRepository: AuthRepository
+) : ViewModelProvider.Factory {
+
+    override fun <T : ViewModel> create(
+        modelClass: Class<T>
+    ): T {
+        if (modelClass.isAssignableFrom(AuthViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return AuthViewModel(authRepository) as T
+        }
+
+        throw IllegalArgumentException(
+            "ViewModel desconocido: ${modelClass.name}"
+        )
     }
 }
 
@@ -115,8 +163,10 @@ class RecordatorioViewModelFactory(
     override fun <T : ViewModel> create(
         modelClass: Class<T>
     ): T {
+
         if (modelClass.isAssignableFrom(RecordatorioViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
+
             return RecordatorioViewModel(
                 repository,
                 preferenciasRepository,

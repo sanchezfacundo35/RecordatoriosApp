@@ -26,7 +26,9 @@ fun Recordatorio.toEntity(
         ubicacion = ubicacion,
         pendienteSincronizacion = pendienteSincronizacion,
         remoteId = remoteId,
-        pendienteEliminar = pendienteEliminar
+        pendienteEliminar = pendienteEliminar,
+        firestoreId = firestoreId,
+        ownerUid = ownerUid
     )
 }
 
@@ -44,6 +46,8 @@ fun RecordatorioEntity.toRecordatorio(): Recordatorio {
             "Completado" -> EstadoRecordatorio.Completado
             else -> EstadoRecordatorio.Pendiente
         },
-        ubicacion = ubicacion
+        ubicacion = ubicacion,
+        ownerUid = ownerUid,
+        firestoreId = firestoreId
     )
 }

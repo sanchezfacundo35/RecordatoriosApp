@@ -11,6 +11,7 @@ import com.facundo.recordatoriosapp.model.Categoria
 import com.facundo.recordatoriosapp.model.EstadoRecordatorio
 import com.facundo.recordatoriosapp.model.Prioridad
 import com.facundo.recordatoriosapp.model.Recordatorio
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,7 +19,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.Job
 
 sealed interface EstadoListaRecordatorios {
     data object Cargando : EstadoListaRecordatorios
@@ -54,10 +54,11 @@ class RecordatorioViewModel(
 
     private val _uiState = MutableStateFlow(RecordatorioUiState())
     val uiState: StateFlow<RecordatorioUiState> = _uiState.asStateFlow()
+
     private var cargaJob: Job? = null
+    private var sesionActiva = false
 
     init {
-        cargarRecordatorios()
         observarPreferencias()
         observarConexion()
     }
@@ -80,12 +81,20 @@ class RecordatorioViewModel(
                     hayConexion = conectado
                 )
 
-                // Si vuelve Internet, sincroniza los cambios pendientes de Room.
-                if (conectado) {
+                android.util.Log.d(
+                    "ESTADO_CONEXION",
+                    "Conectado: $conectado"
+                )
+
+                if (conectado && sesionActiva) {
                     try {
                         repository.sincronizarPendientes()
                     } catch (e: Exception) {
-                        // Los datos locales se conservan para volver a intentar.
+                        android.util.Log.e(
+                            "SYNC_RECORDATORIOS",
+                            "Error al sincronizar pendientes",
+                            e
+                        )
                     }
                 }
             }
@@ -170,7 +179,6 @@ class RecordatorioViewModel(
         )
         cargarRecordatorios()
     }
-
 
     fun reintentarCarga() {
         _uiState.value = _uiState.value.copy(
@@ -282,6 +290,7 @@ class RecordatorioViewModel(
                     repository.actualizar(recordatorio)
                 }
 
+                // Finalizar el guardado local inmediatamente.
                 _uiState.value = _uiState.value.copy(
                     titulo = "",
                     descripcion = "",
@@ -291,17 +300,36 @@ class RecordatorioViewModel(
                     guardando = false,
                     guardado = true
                 )
+
+                // Sincronizar en segundo plano si hay conexión.
+                if (_uiState.value.hayConexion) {
+                    viewModelScope.launch {
+                        try {
+                            repository.sincronizarPendientes()
+                        } catch (e: Exception) {
+                            android.util.Log.e(
+                                "SYNC_RECORDATORIOS",
+                                "Error al sincronizar pendientes",
+                                e
+                            )
+                        }
+                    }
+                }
+
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     guardando = false,
-                    errorGeneral = e.message ?: "No se pudo guardar el recordatorio"
+                    errorGeneral = e.message
+                        ?: "No se pudo guardar el recordatorio"
                 )
             }
         }
     }
 
     fun limpiarConfirmacion() {
-        _uiState.value = _uiState.value.copy(guardado = false)
+        _uiState.value = _uiState.value.copy(
+            guardado = false
+        )
     }
 
     fun cancelarEdicion() {
@@ -344,6 +372,21 @@ class RecordatorioViewModel(
         viewModelScope.launch {
             try {
                 repository.actualizar(recordatorio)
+
+                if (_uiState.value.hayConexion) {
+                    viewModelScope.launch {
+                        try {
+                            repository.sincronizarPendientes()
+                        } catch (e: Exception) {
+                            android.util.Log.e(
+                                "SYNC_RECORDATORIOS",
+                                "Error al sincronizar actualización",
+                                e
+                            )
+                        }
+                    }
+                }
+
                 onResultado(null)
             } catch (e: Exception) {
                 onResultado(e.message ?: "No se pudo actualizar")
@@ -358,10 +401,69 @@ class RecordatorioViewModel(
         viewModelScope.launch {
             try {
                 repository.eliminar(recordatorio)
+
+                if (_uiState.value.hayConexion) {
+                    viewModelScope.launch {
+                        try {
+                            repository.sincronizarPendientes()
+                        } catch (e: Exception) {
+                            android.util.Log.e(
+                                "SYNC_RECORDATORIOS",
+                                "Error al sincronizar eliminación",
+                                e
+                            )
+                        }
+                    }
+                }
+
                 onResultado(null)
             } catch (e: Exception) {
                 onResultado(e.message ?: "No se pudo eliminar")
             }
+        }
+    }
+
+    fun actualizarSesion(activa: Boolean) {
+        if (sesionActiva == activa) return
+
+        sesionActiva = activa
+
+        if (activa) {
+            _uiState.value = _uiState.value.copy(
+                lista = EstadoListaRecordatorios.Cargando
+            )
+
+            cargarRecordatorios()
+
+            if (_uiState.value.hayConexion) {
+                viewModelScope.launch {
+                    try {
+                        repository.sincronizarPendientes()
+                    } catch (e: Exception) {
+                        android.util.Log.e(
+                            "SYNC_RECORDATORIOS",
+                            "Error al sincronizar",
+                            e
+                        )
+                    }
+                }
+            }
+        } else {
+            cargaJob?.cancel()
+
+            _uiState.value = _uiState.value.copy(
+                lista = EstadoListaRecordatorios.Vacio,
+                titulo = "",
+                descripcion = "",
+                categoria = null,
+                prioridad = null,
+                recordatorioEditando = null,
+                guardado = false,
+                errorGeneral = null,
+                filtroEstado = null,
+                filtroCategoria = null,
+                filtroPrioridad = null
+            )
         }
     }
 }

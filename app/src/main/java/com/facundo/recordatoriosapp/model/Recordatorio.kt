@@ -9,5 +9,7 @@ data class Recordatorio(
     val categoria: Categoria,
     val prioridad: Prioridad,
     val estado: EstadoRecordatorio,
-    val ubicacion: String? = null
+    val ubicacion: String? = null,
+    val ownerUid: String? = null,
+    val firestoreId: String? = null
 )

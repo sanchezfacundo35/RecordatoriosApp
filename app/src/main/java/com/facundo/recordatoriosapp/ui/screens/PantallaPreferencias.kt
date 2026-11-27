@@ -37,7 +37,8 @@ import com.facundo.recordatoriosapp.viewmodel.RecordatorioViewModel
 @Composable
 fun PantallaPreferencias(
     viewModel: RecordatorioViewModel,
-    onVolver: () -> Unit
+    onVolver: () -> Unit,
+    onCerrarSesion: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val preferencias = uiState.preferencias
@@ -177,6 +178,13 @@ fun PantallaPreferencias(
             ) {
                 Text("Volver")
             }
+
+            Button(
+                onClick = onCerrarSesion,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cerrar sesión")
+            }
         }
     }
 }
@@ -195,7 +203,6 @@ fun FiltroDropdown(
     Box(
         modifier = Modifier.fillMaxWidth()
     ) {
-
         OutlinedTextField(
             value = seleccionado,
             onValueChange = {},
@@ -209,7 +216,6 @@ fun FiltroDropdown(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Capa transparente que captura el toque
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -225,7 +231,6 @@ fun FiltroDropdown(
             }
         ) {
             opciones.forEach { opcion ->
-
                 DropdownMenuItem(
                     text = {
                         Text(opcion)
